@@ -12,16 +12,16 @@ width = int(video.get(cv.CAP_PROP_FRAME_WIDTH))
 height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))
 video_dim = (width, height)
 
-slam = Slam()
+slam = Slam(width, height)
 
 while True:
     ret, frame = video.read()
     assert ret
     frame = cv.resize(frame, video_dim, interpolation = cv.INTER_AREA)
+    slam.view_points(frame)
     cv.imshow('Video', frame)
     key = cv.waitKey(25)
     if key == ord('q'):
         break
-    slam.view_points(frame)
 video.release()
 cv.destroyAllWindows()

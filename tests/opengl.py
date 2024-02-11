@@ -11,20 +11,20 @@ from OpenGL.GL import *
 import math
 
 class Camera:
-    def __init__(self, fov=60, orientation_=(0.0, 0.0, 0.0), position_=(0.0, 0.0, 0.0)) -> None:
+    def __init__(self, fov=45, position_=(0.0, 0.0, 0.0)) -> None:
         self.position = position_ 
         self.projection_matrix = None
         self.modelview_matrix = None
-        self.orbital_radius = 40 # orbital_radius from the camera to the origin
-        self.polar = 0 # rads
-        self.azimuth = 0 # rads
-        self.setup(fov_y=fov, aspect_ratio=1.0, near=0.1, far=25000.0)
+        self.orbital_radius = 10 # orbital_radius from the camera to the origin
+        self.polar = np.deg2rad(0) # rads
+        self.azimuth = np.deg2rad(0) # rads
+        self.setup(fov_y=fov, aspect_ratio=1.0, near=1, far=500.0)
         self.update()
 
     def set_origin(self, position=(0.0, 0.0, 0.0)):
         self.position = position
 
-    def setup(self, fov_y=60, aspect_ratio=1.0, near=0.1, far=1500.0):
+    def setup(self, fov_y=45, aspect_ratio=1.0, near=0.1, far=5000.0):
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         glFrustum(-aspect_ratio * math.tan(np.deg2rad(fov_y) / 2),
@@ -44,6 +44,10 @@ class Camera:
     @property
     def get_modelview_matrix(self):
         return self.modelview_matrix
+    
+    @property
+    def get_position(self):
+        return self.position
 
     def rotate_azimuth(self, degree=0.0):
         radians = np.deg2rad(degree)
@@ -84,25 +88,22 @@ class Camera:
 
     def update(self, rotation_center=(0, 0, 0)):
         self.handle_mouse()
-        x = self.orbital_radius * np.cos(self.polar) * np.cos(self.azimuth) + rotation_center[0]
-        y = self.orbital_radius * np.sin(self.polar) + rotation_center[1]
-        z = self.orbital_radius * np.cos(self.polar) * np.sin(self.azimuth) + rotation_center[2]
+        x = self.orbital_radius * np.cos(self.polar) * np.cos(self.azimuth)
+        y = self.orbital_radius * np.sin(self.polar)
+        z = self.orbital_radius * np.cos(self.polar) * np.sin(self.azimuth)
         self.position = (x,
                          y,
                          z)
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
-        glTranslatef(*self.position)  # Position the camera
-        gluLookAt(*rotation_center, 0, 0, 0, 0, 1, 0)
-        self.modelview_matrix = np.array(glGetFloatv(GL_MODELVIEW_MATRIX), dtype=np.float32)
-        glMultMatrixf(self.modelview_matrix.tobytes())
+        gluLookAt(*self.position, 0, 0, 0, 0, 1, 0)
 
 class Renderer3D:
     def __init__(self) -> None:
         self.window = (800, 600)
-        self.fov = 60
+        self.fov = 90
         pygame.display.set_mode(self.window, DOUBLEBUF | OPENGL)
-        gluPerspective(self.fov, (self.window[0] / self.window[1]), 1.1, 5000.0) # TODO maybe change
+        #gluPerspective(self.fov, (self.window[0] / self.window[1]), 0.1, 5000.0) # TODO maybe change
         self.camera = Camera(fov=self.fov)
 
     def draw_cube(self):
@@ -124,10 +125,10 @@ class Renderer3D:
         glEnd()
 
     def render_axis(self):
-        self.draw_lines(start=(0, 0, 0), end=(1000, 0, 0), color=(1.0, 0.0, 0.0))
-        self.draw_lines(start=(0, 0, 0), end=(0, 1000, 0), color=(0.0, 1.0, 0.0))
-        self.draw_lines(start=(0, 0, 0), end=(0, 0, 1000), color=(0.0, 0.0, 1.0))
-
+        self.draw_lines(start=(0, 0, 0), end=(10, 0, 0), color=(1.0, 0.0, 0.0))
+        self.draw_lines(start=(0, 0, 0), end=(0, 10, 0), color=(0.0, 1.0, 0.0))
+        self.draw_lines(start=(0, 0, 0), end=(0, 0, 10), color=(0.0, 0.0, 1.0))
+    
     def draw_point(self, point, color=(0.0, 1.0, 0.0)):
         glColor3f(*color)
         glBegin(GL_POINTS)
@@ -142,7 +143,8 @@ class Renderer3D:
         if points3D is None:
             return
 
-        glClear(GL_COLOR_BUFFER_BIT)
+        glClearColor(1.0, 1.0, 1.0, 0.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         self.render_axis()
         for i, point in enumerate(points3D):
             r = (i + 1) / len(points3D)

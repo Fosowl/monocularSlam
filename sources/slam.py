@@ -33,6 +33,7 @@ class Vision():
     def __init__(self, video_dim: Tuple[int, int], _focal) -> None:
         self.orb = cv.ORB_create()
         self.matcher = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
+        self.feats = None
         self.focal = _focal
         self.cx = video_dim[0] // 2
         self.cy = video_dim[1] // 2
@@ -69,9 +70,10 @@ class Vision():
     def find_matching_points(self, current_frame: Frame, last_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=150, qualityLevel=0.01, minDistance=5)
+        feats = cv.goodFeaturesToTrack(match, maxCorners=5000, qualityLevel=0.01, minDistance=15)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
+        self.feats = feats
         self.current_frame.kps = kps
         self.current_frame.des = des
         if self.last_frame.kps is None or self.last_frame.des is None:
@@ -86,13 +88,17 @@ class Vision():
     def view_interest_points(self, frame: Frame, matches: Tuple[Tuple[float, float], Tuple[float, float]]):
         assert matches != None, "No matches passed"
         assert frame.pixels is not None, "No frame passed"
-        for pt1, pt2 in matches:
+
+        for i, (pt1, pt2) in enumerate(matches):
+            r = ((i + 1) / len(matches)) * 255
+            g = 255
+            b = 0
             # current frame
-            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(0, 255, 0), radius=6)
+            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(b, g, r), radius=8)
             # previous frame
-            cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(0, 0, 255), radius=10)
+            #cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(g, 0, 255), radius=4)
             # line
-            cv.line(frame.pixels, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), color=(38, 207, 63), thickness=3)
+            cv.line(frame.pixels, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), color=(38, 207, 63), thickness=2)
         return frame.pixels
 
 class Slam():
@@ -102,7 +108,6 @@ class Slam():
     def update_frame_pixels(self, current_frame_pixels: np.ndarray, last_frame_pixels: np.ndarray):
         if last_frame_pixels is not None:
             self.vision.last_frame = self.vision.current_frame
-            self.vision.last_frame.assign_frame_pixels(last_frame_pixels)
         self.vision.current_frame.assign_frame_pixels(current_frame_pixels)
     
     def get_vision_matches(self, render_frame):
@@ -135,9 +140,9 @@ class Slam():
         projPoints1 = np.array(projPoints1).T  # (2, N)
         projPoints2 = np.array(projPoints2).T
         points4D = cv.triangulatePoints(past_projection_matrix, projection_matrix, projPoints1, projPoints2)
-        scales = points4D[3]
-        points3D = (points4D[:3] / scales).T
-        points3D *= 100 # scaling up for 3D rendering
+        scales = points4D[3] # NOTE might be needed to scale the points
+        points3D = (points4D[:3] / 1).T
+        points3D *= 1000 # scaling up for 3D rendering
         centroid = sum([v for v in points3D]) / len(points3D)
         print(f"3D centroid: {centroid}")
         return points3D, centroid

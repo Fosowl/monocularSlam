@@ -4,6 +4,7 @@ import cv2 as cv
 from sources.slam import Frame
 from sources.slam import Slam
 from sources.render import Renderer3D
+import time
 
 video = cv.VideoCapture('./videos/forest_road.mp4')
 if not video.isOpened():
@@ -38,8 +39,7 @@ while True:
     skip_frame -= 1
     if matches is not None:
         points, centroid = slam.triangulate(matches)
-        #renderer.position_camera(position=(centroid[0], centroid[1], centroid[2]))
-        renderer.render3dSpace(points)
+        renderer.render3dSpace(points, centroid)
     cv.imshow('Video', frame_pixels)
     renderer.render()
     key = cv.waitKey(25)

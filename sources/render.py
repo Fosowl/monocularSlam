@@ -11,51 +11,20 @@ from OpenGL.GL import *
 import math
 
 class Camera:
-    def __init__(self, fov=60, orientation_=(0.0, 0.0, 0.0), position_=(0.0, 0.0, -4.0)) -> None:
-        self.orientation = orientation_
+    def __init__(self, fov=45, cam_distance_ = 50, position_=(0.0, 0.0, 0.0)) -> None:
         self.position = position_ 
         self.projection_matrix = None
         self.modelview_matrix = None
-        self.forward = (0.0, 0.0, 1.0)
-        self.setup()
+        self.orbital_radius = cam_distance_ # orbital_radius from the camera to the origin
+        self.polar = np.deg2rad(0) # rads
+        self.azimuth = np.deg2rad(0) # rads
+        self.setup(fov_y=fov, aspect_ratio=1.0, near=10, far=1000.0)
         self.update()
 
-    def rotate_camera(self, angle_x=0.0, angle_y=0.0, angle_z=0.0):
-        self.orientation = (angle_x, angle_y, angle_z)
-    
-    def position_camera(self, position=(0.0, 0.0, 0.0)):
+    def set_origin(self, position=(0.0, 0.0, 0.0)):
         self.position = position
 
-    @property
-    def get_projection_matrix(self):
-        return self.projection_matrix
-    
-    @property
-    def get_modelview_matrix(self):
-        return self.modelview_matrix
-
-    def update_forward_vector(self):
-        pitch, yaw, _ = map(np.deg2rad, self.orientation)  # Convert to radians
-        self.forward = (
-            np.cos(pitch) * np.cos(yaw),
-            np.sin(pitch),
-            np.cos(pitch) * np.sin(yaw)
-        )
-
-    def update(self, rotation_center=(0, 0, 0)):
-        self.handle_mouse()
-        self.update_forward_vector()
-        glMatrixMode(GL_MODELVIEW)
-        glLoadIdentity()
-        glTranslatef(*self.position)  # Position the camera
-        angle_x, angle_y, angle_z = self.orientation
-        glRotatef(angle_x, 1, 0, 0)  # Rotate around x-axis
-        glRotatef(angle_y, 0, 1, 0)  # Rotate around y-axis
-        glRotatef(angle_z, 0, 0, 1)  # Rotate around y-axis
-        self.modelview_matrix = np.array(glGetFloatv(GL_MODELVIEW_MATRIX), dtype=np.float32)
-        glMultMatrixf(self.modelview_matrix.tobytes())
-
-    def setup(self, fov_y=60, aspect_ratio=1.0, near=0.1, far=1500.0):
+    def setup(self, fov_y=45, aspect_ratio=1.0, near=0.1, far=5000.0):
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         glFrustum(-aspect_ratio * math.tan(np.deg2rad(fov_y) / 2),
@@ -67,34 +36,79 @@ class Camera:
         self.projection_matrix = np.array(glGetFloatv(GL_PROJECTION_MATRIX), dtype=np.float32)
         print("Projection matrix:")
         print(self.projection_matrix)
+
+    @property
+    def get_projection_matrix(self):
+        return self.projection_matrix
     
-    def handle_mouse(self):
-        mouse_dx, mouse_dy = 0, 0
+    @property
+    def get_modelview_matrix(self):
+        return self.modelview_matrix
+    
+    @property
+    def get_position(self):
+        return self.position
+
+    def rotate_azimuth(self, degree=0.0):
+        radians = np.deg2rad(degree)
+        self.azimuth += radians
+        circle = 2.0 * math.pi
+        self.azimuth = self.azimuth % circle
+        if self.azimuth < 0:
+            self.azimuth += circle
+
+    def rotate_polar(self, degree=0.0):
+        radians = np.deg2rad(degree)
+        self.polar += radians
+        polar_cap = math.pi / 2.0 - 0.01
+        if self.polar > polar_cap:
+            self.polar = polar_cap
+        elif self.polar < -polar_cap:
+            self.polar = -polar_cap
+    
+    def zoom(self, by=0.0):
+        self.orbital_radius += by
+        if self.orbital_radius < 10:
+            self.orbital_radius = 10
+
+    def update(self, rotation_center=(0, 0, 0)):
+        x = self.orbital_radius * np.cos(self.polar) * np.cos(self.azimuth)
+        y = self.orbital_radius * np.sin(self.polar)
+        z = self.orbital_radius * np.cos(self.polar) * np.sin(self.azimuth)
+        self.position = (x,
+                         y,
+                         z)
+        glMatrixMode(GL_MODELVIEW)
+        glLoadIdentity()
+        gluLookAt(*self.position, 0, 0, 0, 0, 1, 0)
+    
+class Renderer3D:
+    def __init__(self, pov_=45.0, cam_distance=50) -> None:
+        self.window = (800, 600)
+        self.fov = pov_
+        pygame.display.set_mode(self.window, DOUBLEBUF | OPENGL)
+        self.camera = Camera(fov=self.fov, cam_distance_=cam_distance)
+        self.pause = False
+        self.saved_points = None
+
+    def handle_inputs(self):
+        rotation_speed = 10
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-            if event.type == pygame.MOUSEMOTION and event.buttons[0] == 1:
-                mouse_dx, mouse_dy = event.rel
-            if not event.type == pygame.MOUSEBUTTONDOWN:
-                continue
-            if event.button == 4:
-                self.position = [pos + 0.5 * forward for pos, forward in zip(self.position, self.forward)]
-            elif event.button == 5:
-                self.position = [pos - 0.5 * forward for pos, forward in zip(self.position, self.forward)]
-            
-        self.orientation = (self.orientation[0] + mouse_dx * 1.0,
-                            self.orientation[1] + mouse_dy * 1.0,
-                            self.orientation[2])
-        print("Cam orientation: ", self.orientation)
-    
-class Renderer3D:
-    def __init__(self) -> None:
-        self.window = (800, 600)
-        self.fov = 60
-        pygame.display.set_mode(self.window, DOUBLEBUF | OPENGL)
-        gluPerspective(self.fov, (self.window[0] / self.window[1]), 1.1, 5000.0) # TODO maybe change
-        self.camera = Camera(fov=self.fov)
+            keys = pygame.key.get_pressed()
+            if keys[pygame.K_LEFT]:
+                self.camera.rotate_azimuth(rotation_speed)
+            if keys[pygame.K_RIGHT]:
+                self.camera.rotate_azimuth(-rotation_speed)
+            if keys[pygame.K_UP]:
+                self.camera.rotate_polar(rotation_speed)
+            if keys[pygame.K_DOWN]:
+                self.camera.rotate_polar(-rotation_speed)
+            if keys[pygame.K_ESCAPE] and event.type == pygame.KEYDOWN:
+                self.pause = not self.pause
+                print("Paused" if self.pause else "Unpaused")
 
     def draw_cube(self):
         vertices = [(-0.5, -0.5, -0.5), (0.5, -0.5, -0.5), (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),
@@ -115,10 +129,15 @@ class Renderer3D:
         glEnd()
 
     def render_axis(self):
-        glMatrixMode(GL_MODELVIEW)
-        self.draw_lines(start=(0, 0, 0), end=(100, 0, 0), color=(1.0, 0.0, 0.0))
-        self.draw_lines(start=(0, 0, 0), end=(0, 100, 0), color=(0.0, 1.0, 0.0))
-        self.draw_lines(start=(0, 0, 0), end=(0, 0, 1000), color=(0.0, 0.0, 1.0))
+        self.draw_lines(start=(0, 0, 0), end=(10, 0, 0), color=(1.0, 0.0, 0.0))
+        self.draw_lines(start=(0, 0, 0), end=(0, 10, 0), color=(0.0, 1.0, 0.0))
+        self.draw_lines(start=(0, 0, 0), end=(0, 0, 10), color=(0.0, 0.0, 1.0))
+    
+    def draw_point(self, point, color=(0.0, 1.0, 0.0)):
+        glColor3f(*color)
+        glBegin(GL_POINTS)
+        glVertex3f(*point)
+        glEnd()
 
     def render(self):
         pygame.display.flip()
@@ -139,22 +158,20 @@ class Renderer3D:
         transformation_matrix = np.identity(4)
         transformation_matrix[:3, 3] = -centroid
         return transformation_matrix
-    
-    def render3dSpace(self, points3D, centroid):
-        if points3D is None:
-            return
-        # Convert points to OpenGL coordinate system (right handed)
-        points3D = self.convert_points_to_opengl(points3D)
-        transformation_matrix = self.create_transformation_matrix(centroid)
-        points3D = np.dot(transformation_matrix, np.concatenate([points3D, np.ones((points3D.shape[0], 1))], axis=1).T).T[:, :3]
 
-        glClear(GL_COLOR_BUFFER_BIT)
-        print("Rendering {} points".format(len(points3D)))
-        for i, point in enumerate(points3D):
-            r = (i + 1) / len(points3D)
-            color = (r, 255, 0.0)
-            point = point - centroid
-            self.draw_point(point, color)
-        self.camera.update()
+    def render3dSpace(self, points3D_slam, centroid):
+        if points3D_slam is None:
+            return
+        if not self.pause:
+            self.saved_points = self.convert_points_to_opengl(points3D_slam)
+        glClearColor(0, 0, 0, 0.0)
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         self.render_axis()
+        for i, point in enumerate(self.saved_points):
+            r = (i + 1) / len(self.saved_points)
+            point -= centroid
+            color = (r, 255, 0.0)
+            self.draw_point(point, color)
         self.draw_cube()
+        self.handle_inputs()
+        self.camera.update()

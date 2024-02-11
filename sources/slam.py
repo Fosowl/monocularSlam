@@ -70,7 +70,7 @@ class Vision():
     def find_matching_points(self, current_frame: Frame, last_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=5000, qualityLevel=0.01, minDistance=15)
+        feats = cv.goodFeaturesToTrack(match, maxCorners=1000, qualityLevel=0.01, minDistance=15)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
         self.feats = feats
@@ -142,7 +142,7 @@ class Slam():
         points4D = cv.triangulatePoints(past_projection_matrix, projection_matrix, projPoints1, projPoints2)
         scales = points4D[3] # NOTE might be needed to scale the points
         points3D = (points4D[:3] / 1).T
-        points3D *= 1000 # scaling up for 3D rendering
+        points3D *= 10 # scaling up for 3D rendering
         centroid = sum([v for v in points3D]) / len(points3D)
         print(f"3D centroid: {centroid}")
         return points3D, centroid

@@ -18,9 +18,9 @@ cv.namedWindow('Video', cv.WINDOW_NORMAL)
 cv.resizeWindow('Video', width // 2, height // 2)
 
 slam = Slam(width, height)
-renderer = Renderer3D()
+renderer = Renderer3D(pov_=90, cam_distance=500)
 
-skip_frame = 3
+skip_frame = 2
 matches = None
 
 frame_pixels = None
@@ -30,16 +30,15 @@ while True:
     ret, frame_pixels = video.read()
     assert ret != None, "Failed to read video"
     frame_pixels = cv.resize(frame_pixels, video_dim, interpolation = cv.INTER_AREA)
-    slam.update_frame_pixels(current_frame_pixels=frame_pixels,
-                             last_frame_pixels=last_frame_pixels)
-    matches, frame_pixels = slam.get_vision_matches(frame_pixels)
-    if skip_frame == 0:
-        last_frame_pixels = frame_pixels
-        skip_frame = 3
-    skip_frame -= 1
-    if matches is not None:
-        points, centroid = slam.triangulate(matches)
-        renderer.render3dSpace(points, centroid)
+    if last_frame_pixels is not None and not (frame_pixels==last_frame_pixels).all(): 
+        slam.update_frame_pixels(current_frame_pixels=frame_pixels,
+                                 last_frame_pixels=last_frame_pixels)
+        matches, frame_pixels = slam.get_vision_matches(frame_pixels)
+        if matches is not None:
+            points, centroid = slam.triangulate(matches)
+            proj_matrix = slam.projection_matrix
+            renderer.render3dSpace(points, centroid, proj_matrix)
+    last_frame_pixels = frame_pixels.copy()
     cv.imshow('Video', frame_pixels)
     renderer.render()
     key = cv.waitKey(25)

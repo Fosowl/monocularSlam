@@ -101,15 +101,11 @@ class Renderer3D:
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
+            elif event.type == pygame.MOUSEMOTION:
+                mouse_dx, mouse_dy = pygame.mouse.get_rel()
+                self.camera.rotate_azimuth(-mouse_dx*0.5)
+                self.camera.rotate_polar(mouse_dy*0.5)
             keys = pygame.key.get_pressed()
-            if keys[pygame.K_LEFT]:
-                self.camera.rotate_azimuth(rotation_speed)
-            if keys[pygame.K_RIGHT]:
-                self.camera.rotate_azimuth(-rotation_speed)
-            if keys[pygame.K_UP]:
-                self.camera.rotate_polar(rotation_speed)
-            if keys[pygame.K_DOWN]:
-                self.camera.rotate_polar(-rotation_speed)
             if keys[pygame.K_ESCAPE] and event.type == pygame.KEYDOWN:
                 self.pause = not self.pause
                 print("Paused" if self.pause else "Unpaused")

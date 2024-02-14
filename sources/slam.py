@@ -47,6 +47,10 @@ class Vision():
         self.current_frame = Frame()
         self.last_frame = Frame()
         self.matches = None
+        self.camera_poses = []
+    
+    def get_camera_poses(self):
+        return self.camera_poses
 
     def get_camera_pose(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
         assert matches != None, "No matches given"
@@ -65,7 +69,7 @@ class Vision():
         pose['t'] = t
         self.current_frame.E = E
         self.current_frame.pose = pose
-        print("UPDATED")
+        self.camera_poses.append(self.current_frame.pose)
 
     def distance_between_points(self, pt1: float, pt2: float):
         return np.sqrt((pt1[0] - pt2[0])**2 + (pt1[1] - pt2[1])**2)
@@ -116,6 +120,7 @@ class Slam():
         self._past_projection_matrix = None
         self.E_buffer = None
         self.pose_buffer = None
+        self.centroid = None
     
     @property
     def projection_matrix(self):
@@ -124,6 +129,9 @@ class Slam():
     @property
     def past_projection_matrix(self):
         return self._past_projection_matrix
+    
+    def get_camera_poses(self):
+        return self.vision.get_camera_poses()
 
     def update_frame_pixels(self, current_frame_pixels: np.ndarray, last_frame_pixels: np.ndarray):
         assert current_frame_pixels is not None, "No frame passed"
@@ -179,27 +187,22 @@ class Slam():
                                             self.vision.last_frame.pose['t']))
         projPoints1 = []
         projPoints2 = []
-        print("E current: ", self.vision.current_frame.E)
-        print("E last: ", self.vision.last_frame.E)
         for kp1, kp2 in matches:
             projPoints1.append([kp1[0], kp1[1]])
             projPoints2.append([kp2[0], kp2[1]])
         projPoints1 = np.array(projPoints1).T  # (2, N)
         projPoints2 = np.array(projPoints2).T
         points4D = cv.triangulatePoints(self._past_projection_matrix, self._projection_matrix, projPoints1, projPoints2)
-        scales = points4D[3]
-        points3D = (points4D[:3] / scales).T
+        goods = (np.abs(points4D[3, :]) > 0.005) & (np.abs(points4D[2, :]) > 0)
+        if len(goods[goods == True]) < 50:
+            return None, (0, 0, 0)
+        points4D = points4D[:, goods]
+        # now 3d
+        points3D = (points4D[:3] / points4D[3]).T
         points3D = self.transform_points_3D_openGL(points4D)
         points3D = self.hand_rule_change(points3D)
-        #points3D = points3D[points3D[:, 2] > 0]
-        centroid = sum([v for v in points3D]) / len(points3D)
-        if len(points3D) == 0:
-            return None, (0, 0, 0)
-        print("Farest point: ", np.max(points3D, axis=0))
-        print("x sum: ", np.sum(points3D[:, 0]))
-        print("y sum: ", np.sum(points3D[:, 1]))
-        print("z sum: ", np.sum(points3D[:, 2]))
+        self.centroid = sum([v for v in points3D]) / len(points3D)
         self.vision.last_frame.E = self.vision.current_frame.E
         self.vision.last_frame.pose = self.vision.current_frame.pose
-        return points3D, centroid
+        return points3D
     

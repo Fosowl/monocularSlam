@@ -141,27 +141,50 @@ class Renderer3D:
         pygame.display.flip()
         pygame.time.wait(10)
 
-    def draw_points(self, points, slam_proj_matrix, color=(0.0, 1.0, 0.0)):
+    def draw_points(self, points, slam_proj_matrix, position, color=(0.0, 1.0, 0.0)):
         assert len(points) > 0, "No points to draw"
+        """
         viewport = glGetIntegerv(GL_VIEWPORT)
         modelview = glGetFloatv(GL_MODELVIEW_MATRIX).astype('d')
-        #proj = slam_proj_matrix.astype('d')
+        proj = slam_proj_matrix.astype('d')
         proj = glGetFloatv(GL_PROJECTION_MATRIX).astype('d') 
-        glColor3f(*color)
+        """
         glBegin(GL_POINTS)
+        max_z = max(points, key=lambda x: np.abs(x[2]))[2]
+        max_y = max(points, key=lambda x: np.abs(x[1]))[1]
+        max_x = max(points, key=lambda x: np.abs(x[0]))[0]
+        print("Max x: ", max_x, "Max y: ", max_y, "Max z: ", max_z)
         for i, point in enumerate(points):
-            r = (i + 1) / len(points)
-            color = (r, 255, 0.0)
+            color = (1, 0.3, 0)
+            glColor3f(*color)
+            # no need to project since slam already use w component of vector to project points ?
+            # https://learnopengl.com/Getting-started/Coordinate-Systems
             #point_proj = gluProject(point[0], point[1], point[2], modelview, proj, viewport)
-            glVertex3f(*point)
+            point_corrected = (point[0] + position[0],
+                               point[1] + position[1],
+                               point[2] + position[2])
+            glVertex3f(*point_corrected)
         glEnd()
+
+    def draw_trajectory(self, camera_poses, color=(0.5, 0.5, 1.0)):
+        T_total = np.zeros((3, 1))
+        R_total = np.eye(3)
+        glColor3f(*color)
+        glBegin(GL_LINE_STRIP)
+        for pose in camera_poses:
+            T_total += R_total @ pose['t']
+            R_total = R_total @ pose['R']
+            glVertex3f(*T_total)
+        print(f"Last position:\n{T_total}")
+        glEnd()
+        return T_total
+
 
     @property
     def is_paused(self):
         return self.pause
 
-    def render3dSpace(self, points3D, centroid, slam_proj_matrix):
-        assert points3D is not None, "No points to render"
+    def render3dSpace(self, points3D, slam_proj_matrix, camera_poses=None):
         if points3D is None:
             print("No points to render")
             return
@@ -169,7 +192,10 @@ class Renderer3D:
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         self.render_axis()
         print(f"Rendering {len(points3D)} points")
-        self.draw_points(points3D, slam_proj_matrix)
+        position = self.draw_trajectory(camera_poses)
+        self.draw_points(points3D, slam_proj_matrix, position)
         self.draw_cube()
+        assert camera_poses != None, "No camera poses given"
+        # ugly but avoid 2 loops
         self.handle_inputs()
         self.camera.update()

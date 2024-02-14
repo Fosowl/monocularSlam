@@ -35,9 +35,9 @@ while True:
                                  last_frame_pixels=last_frame_pixels)
         matches, frame_pixels = slam.get_vision_matches(frame_pixels)
         if matches is not None:
-            points, centroid = slam.triangulate(matches)
+            points = slam.triangulate(matches)
             proj_matrix = slam.projection_matrix
-            renderer.render3dSpace(points, centroid, proj_matrix)
+            renderer.render3dSpace(points, proj_matrix, slam.get_camera_poses())
     last_frame_pixels = frame_pixels.copy()
     cv.imshow('Video', frame_pixels)
     renderer.render()

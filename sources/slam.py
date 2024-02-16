@@ -32,7 +32,7 @@ class Frame():
         return f"Data: {len(self.pixels)}, kps: {self.kps}, des: {self.des}, E: {self.E}, pose: {self.pose}"
 
 class Vision():
-    def __init__(self, video_dim: Tuple[int, int], _focal) -> None:
+    def __init__(self, video_dim: Tuple[int, int], _focal: float) -> None:
         self.orb = cv.ORB_create()
         self.matcher = cv.BFMatcher(cv.NORM_HAMMING, crossCheck=True)
         self.feats = None
@@ -48,9 +48,17 @@ class Vision():
         self.last_frame = Frame()
         self.matches = None
         self.camera_poses = []
+        self.T_total = np.zeros((3, 1))
+        self.R_total = np.eye(3)
     
     def get_camera_poses(self):
         return self.camera_poses
+    
+    def camera_pose_to_opengl(self, pose):
+        corrected_pose = copy.deepcopy(pose)
+        corrected_pose['t'][1] *= -1
+        corrected_pose['t'][2] *= -1
+        return corrected_pose
 
     def get_camera_pose(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
         assert matches != None, "No matches given"
@@ -69,7 +77,12 @@ class Vision():
         pose['t'] = t
         self.current_frame.E = E
         self.current_frame.pose = pose
-        self.camera_poses.append(self.current_frame.pose)
+        self.camera_poses.append(self.camera_pose_to_opengl(self.current_frame.pose))
+        self.T_total += self.R_total @ pose['t']
+        self.R_total = self.R_total @ pose['R']
+    
+    def get_pose_cumulation(self):
+        return self.R_total, self.T_total
 
     def distance_between_points(self, pt1: float, pt2: float):
         return np.sqrt((pt1[0] - pt2[0])**2 + (pt1[1] - pt2[1])**2)
@@ -77,7 +90,7 @@ class Vision():
     def find_matching_points(self, current_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=3000, qualityLevel=0.01, minDistance=7)
+        feats = cv.goodFeaturesToTrack(match, maxCorners=1500, qualityLevel=0.01, minDistance=7)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
         self.feats = feats
@@ -120,7 +133,8 @@ class Slam():
         self._past_projection_matrix = None
         self.E_buffer = None
         self.pose_buffer = None
-        self.centroid = None
+        self.points_centroid = None
+        self.points3Dcumulative = []
     
     @property
     def projection_matrix(self):
@@ -162,17 +176,20 @@ class Slam():
         points3D[:, 2] *= -1
         return points3D
     
-    def transform_points_3D_openGL(self, points4D):
-        assert points4D is not None, "points4D None"
-        assert points4D.shape[0] == 4, "Points4D not 4xN"
-        R = self.vision.current_frame.pose['R']
-        t = self.vision.current_frame.pose['t']
-        scales = points4D[3]
-        points3D = (points4D[:3] / scales).T
+    def transform_points_3D_openGL(self, points3D):
+        assert points3D is not None, "points3D None"
+        assert points3D.shape[0] == 3, "Points3D not 3D"
+        R, t = self.vision.get_pose_cumulation()
         R_inv = R.T
         t_inv = -R.T @ t
-        return np.dot(points3D, R_inv) + t_inv.T
-
+        return np.dot(points3D.T, R_inv) + t_inv.T
+    
+    # useless
+    def project_points(self, points3D):
+        inv = np.linalg.inv(self.vision.K)
+        points3D_projected = np.dot(inv, points3D)
+        return points3D_projected
+    
     def triangulate(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
         assert matches != None, "matches is None"
         assert len(matches) > 0, "No matches passed"
@@ -192,17 +209,29 @@ class Slam():
             projPoints2.append([kp2[0], kp2[1]])
         projPoints1 = np.array(projPoints1).T  # (2, N)
         projPoints2 = np.array(projPoints2).T
-        points4D = cv.triangulatePoints(self._past_projection_matrix, self._projection_matrix, projPoints1, projPoints2)
-        goods = (np.abs(points4D[3, :]) > 0.005) & (np.abs(points4D[2, :]) > 0)
-        if len(goods[goods == True]) < 50:
-            return None, (0, 0, 0)
-        points4D = points4D[:, goods]
-        # now 3d
-        points3D = (points4D[:3] / points4D[3]).T
-        points3D = self.transform_points_3D_openGL(points4D)
+        mtx1 = self.vision.K
+        mtx2 = self.vision.K
+        projMat1 = mtx1 @ cv.hconcat([self.vision.current_frame.pose['R'], self.vision.current_frame.pose['t']]) # Cam1 is the origin
+        projMat2 = mtx2 @ cv.hconcat([self.vision.last_frame.pose['R'], self.vision.last_frame.pose['t']]) # R, T from stereoCalibrate
+        points1u = cv.undistortPoints(projPoints1, mtx1, 1, None, mtx1)
+        points2u = cv.undistortPoints(projPoints2, mtx2, 1, None, mtx2)
+        #points4D = cv.triangulatePoints(self._past_projection_matrix, self._projection_matrix, projPoints1, projPoints2)
+        points4D = cv.triangulatePoints(projMat1, projMat2, points1u, points2u)
+        # 3d
+        points3D = (points4D[:3] / points4D[3]) # normalize and go 3d
+        goods = np.abs(points4D[3, :]) > 0.005 # check w good
+        goods &= points3D[2, :] > 0 # check points are in front of camera
+        if len(goods[goods == True]) < 25:
+            print("error: not enough points")
+            return None
+        points3D = points3D[:, goods]
+        points3D = self.transform_points_3D_openGL(points3D)
         points3D = self.hand_rule_change(points3D)
-        self.centroid = sum([v for v in points3D]) / len(points3D)
+        self.points_centroid = sum([v for v in points3D]) / len(points3D)
+        print("SLAM: points centroid: ", self.points_centroid)
+        print(f"SLAM: estimate position: {self.vision.T_total[0]}, {self.vision.T_total[1]}, {self.vision.T_total[2]}")
         self.vision.last_frame.E = self.vision.current_frame.E
         self.vision.last_frame.pose = self.vision.current_frame.pose
-        return points3D
+        self.points3Dcumulative.append(points3D)
+        return self.points3Dcumulative
     

@@ -16,8 +16,8 @@ class Camera:
         self._projection_matrix = None
         self._modelview_matrix = None
         self.orbital_radius = cam_distance_ # orbital_radius from the camera to the origin
-        self.polar = np.deg2rad(0) # rads
-        self.azimuth = np.deg2rad(0) # rads
+        self.polar = np.deg2rad(np.deg2rad(0))
+        self.azimuth = np.deg2rad(np.deg2rad(0))
         self.setup(fov_y=fov, aspect_ratio=1.0, near=10, far=50000.0)
         self.update()
 
@@ -55,17 +55,17 @@ class Camera:
         self.azimuth += radians
         circle = 2.0 * math.pi
         self.azimuth = self.azimuth % circle
-        #if self.azimuth < 0:
-        #    self.azimuth += circle
+        if self.azimuth < 0:
+            self.azimuth += circle
 
     def rotate_polar(self, degree=0.0):
         radians = np.deg2rad(degree)
         self.polar += radians
         polar_cap = math.pi / 2.0 - 0.01
-        #if self.polar > polar_cap:
-        #    self.polar = polar_cap - 0.01
-        #elif self.polar < -polar_cap:
-        #    self.polar = -polar_cap + 0.01
+        if self.polar > polar_cap:
+            self.polar = polar_cap - 0.01
+        elif self.polar < -polar_cap:
+            self.polar = -polar_cap + 0.01
     
     def zoom(self, by=0.0):
         self.orbital_radius += by
@@ -85,7 +85,6 @@ class Camera:
                   rotation_center[0], rotation_center[1], rotation_center[2], # look at origin
                   0, 1, 0) # axis
     
-
 class Renderer3D:
     def __init__(self, pov_=90.0, cam_distance=100) -> None:
         self.window = (800, 600)
@@ -96,7 +95,6 @@ class Renderer3D:
         self.saved_points = None
 
     def handle_inputs(self):
-        rotation_speed = 15
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -137,32 +135,51 @@ class Renderer3D:
         pygame.display.flip()
         pygame.time.wait(10)
 
-    def draw_points(self, points, slam_proj_matrix, position, color=(0.0, 1.0, 0.0)):
-        assert len(points) > 0, "No points to draw"
-        """
-        viewport = glGetIntegerv(GL_VIEWPORT)
-        modelview = glGetFloatv(GL_MODELVIEW_MATRIX).astype('d')
-        proj = slam_proj_matrix.astype('d')
-        proj = glGetFloatv(GL_PROJECTION_MATRIX).astype('d') 
-        """
-        glBegin(GL_POINTS)
-        max_z = max(points, key=lambda x: np.abs(x[2]))[2]
-        max_y = max(points, key=lambda x: np.abs(x[1]))[1]
-        max_x = max(points, key=lambda x: np.abs(x[0]))[0]
-        print("Max x: ", max_x, "Max y: ", max_y, "Max z: ", max_z)
-        for i, point in enumerate(points):
-            color = (1, 0.3, 0)
-            glColor3f(*color)
-            # no need to project since slam already use w component of vector to project points ?
-            # https://learnopengl.com/Getting-started/Coordinate-Systems
-            #point_proj = gluProject(point[0], point[1], point[2], modelview, proj, viewport)
-            point_corrected = (point[0] + position[0],
-                               point[1] + position[1],
-                               point[2] + position[2])
-            glVertex3f(*point_corrected)
-        glEnd()
+    def isRotationMatrix(self, R) :
+        Rt = np.transpose(R)
+        shouldBeIdentity = np.dot(Rt, R)
+        I = np.identity(3, dtype = R.dtype)
+        n = np.linalg.norm(I - shouldBeIdentity)
+        return n < 1e-6
+    
+    def rotationMatrixToEulerAngles(self, R) :
+        assert(self.isRotationMatrix(R))
+        sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
+        singular = sy < 1e-6
+        if  not singular :
+            x = math.atan2(R[2,1] , R[2,2])
+            y = math.atan2(-R[2,0], sy)
+            z = math.atan2(R[1,0], R[0,0])
+        else :
+            x = math.atan2(-R[1,2], R[1,1])
+            y = math.atan2(-R[2,0], sy)
+            z = 0
+        return np.array([x, y, z])
 
-    def draw_trajectory(self, camera_poses, color=(0.5, 0.5, 1.0)):
+    def draw_points(self, points, position, rotation, color=(0.0, 1.0, 0.0)):
+        assert points is not None, "No points to draw"
+        assert len(points) > 0, "No points to draw"
+        glPushMatrix()
+        # Apply translation
+        glTranslatef(position[0], position[1], position[2])
+        # Extract rotation angles from R_total
+        angles = self.rotationMatrixToEulerAngles(rotation)
+        # Apply rotation
+        glRotatef(np.rad2deg(angles[0]), 1, 0, 0)  # Rotate around x-axis
+        glRotatef(np.rad2deg(angles[1]), 0, 1, 0)  # Rotate around y-axis
+        glRotatef(np.rad2deg(angles[2]), 0, 0, 1) 
+        glBegin(GL_POINTS)
+        for i, point in enumerate(points):
+            color = (0.4, 0.8, 0)
+            point_wrld = (point[0] + position[0],
+                          point[1] + position[1],
+                          point[2] + position[2])
+            glColor3f(*color)
+            glVertex3f(*point_wrld)
+        glEnd()
+        glPopMatrix()
+
+    def draw_trajectory(self, camera_poses, color=(1.0, 0.0, 0.7)):
         T_total = np.zeros((3, 1))
         R_total = np.eye(3)
         glColor3f(*color)
@@ -171,27 +188,29 @@ class Renderer3D:
             T_total += R_total @ pose['t']
             R_total = R_total @ pose['R']
             glVertex3f(*T_total)
-        print(f"Last position:\n{T_total}")
         glEnd()
         return T_total
-
 
     @property
     def is_paused(self):
         return self.pause
 
-    def render3dSpace(self, points3D, slam_proj_matrix, camera_poses=None):
-        if points3D is None:
+    def render3dSpace(self, points3Dcum, camera_poses=None):
+        if points3Dcum is None:
             print("No points to render")
             return
         glClearColor(0, 0, 0, 0.0)
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         self.render_axis()
-        print(f"Rendering {len(points3D)} points")
-        position = self.draw_trajectory(camera_poses)
-        self.draw_points(points3D, slam_proj_matrix, position)
+        print(f"RENDER: {len(camera_poses)} camera poses")
+        print(f"RENDER: Rendering {len(points3Dcum)} points groups")
+        T_total = np.zeros((3, 1))
+        R_total = np.eye(3)
+        for i, points3D in enumerate(points3Dcum):
+            T_total += R_total @ camera_poses[i]['t']
+            R_total = R_total @ camera_poses[i]['R']
+            self.draw_points(points3D, T_total, R_total)
+        self.draw_trajectory(camera_poses)
         self.draw_cube()
-        assert camera_poses != None, "No camera poses given"
-        # ugly but avoid 2 loops
         self.handle_inputs()
         self.camera.update()

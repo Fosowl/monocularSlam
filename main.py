@@ -15,10 +15,10 @@ width = int(video.get(cv.CAP_PROP_FRAME_WIDTH))
 height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))
 video_dim = (width, height)
 cv.namedWindow('Video', cv.WINDOW_NORMAL)
-cv.resizeWindow('Video', width // 2, height // 2)
+cv.resizeWindow('Video', width // 4, height // 4)
 
 slam = Slam(width, height)
-renderer = Renderer3D(pov_=90, cam_distance=500)
+renderer = Renderer3D(pov_=90, cam_distance=2000)
 
 skip_frame = 2
 matches = None
@@ -36,8 +36,8 @@ while True:
         matches, frame_pixels = slam.get_vision_matches(frame_pixels)
         if matches is not None:
             points = slam.triangulate(matches)
-            proj_matrix = slam.projection_matrix
-            renderer.render3dSpace(points, proj_matrix, slam.get_camera_poses())
+            if points is not None:
+                renderer.render3dSpace(points, slam.get_camera_poses())
     last_frame_pixels = frame_pixels.copy()
     cv.imshow('Video', frame_pixels)
     renderer.render()

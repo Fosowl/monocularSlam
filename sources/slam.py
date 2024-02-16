@@ -56,8 +56,8 @@ class Vision():
     
     def camera_pose_to_opengl(self, pose):
         corrected_pose = copy.deepcopy(pose)
-        corrected_pose['t'][1] *= -1
-        corrected_pose['t'][2] *= -1
+        #corrected_pose['t'][1] *= -1
+        corrected_pose['t'][0] *= -1
         return corrected_pose
 
     def get_camera_pose(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
@@ -90,7 +90,7 @@ class Vision():
     def find_matching_points(self, current_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=1500, qualityLevel=0.01, minDistance=7)
+        feats = cv.goodFeaturesToTrack(match, maxCorners=1000, qualityLevel=0.01, minDistance=7)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
         self.feats = feats
@@ -119,11 +119,11 @@ class Vision():
             g = 255
             b = 0
             # current frame
-            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(b, g, r), radius=6)
+            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(b, g, r), radius=4)
             # previous frame
-            cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(g, 0, 255), radius=6)
+            cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(g, 0, 255), radius=3)
             # line
-            cv.line(frame.pixels, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), color=(38, 207, 63), thickness=2)
+            cv.line(frame.pixels, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), color=(38, 207, 63), thickness=1)
         return frame.pixels
 
 class Slam():

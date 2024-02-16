@@ -159,8 +159,8 @@ class Renderer3D:
     def draw_points(self, points, position, rotation, color=(0.0, 1.0, 0.0)):
         assert points is not None, "No points to draw"
         assert len(points) > 0, "No points to draw"
+        """
         glPushMatrix()
-        # Apply translation
         glTranslatef(position[0], position[1], position[2])
         # Extract rotation angles from R_total
         angles = self.rotationMatrixToEulerAngles(rotation)
@@ -168,6 +168,8 @@ class Renderer3D:
         glRotatef(np.rad2deg(angles[0]), 1, 0, 0)  # Rotate around x-axis
         glRotatef(np.rad2deg(angles[1]), 0, 1, 0)  # Rotate around y-axis
         glRotatef(np.rad2deg(angles[2]), 0, 0, 1) 
+        glPopMatrix()
+        """
         glBegin(GL_POINTS)
         for i, point in enumerate(points):
             color = (0.4, 0.8, 0)
@@ -177,7 +179,6 @@ class Renderer3D:
             glColor3f(*color)
             glVertex3f(*point_wrld)
         glEnd()
-        glPopMatrix()
 
     def draw_trajectory(self, camera_poses, color=(1.0, 0.0, 0.7)):
         T_total = np.zeros((3, 1))

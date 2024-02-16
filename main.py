@@ -6,16 +6,17 @@ from sources.slam import Slam
 from sources.render import Renderer3D
 import time
 
-video = cv.VideoCapture('./videos/forest_road.mp4')
+video = cv.VideoCapture('./videos/snow.mp4')
 if not video.isOpened():
     print("Failed to read video")
     exit()
 
+resize_factor = 1 # can make glitch slam
 width = int(video.get(cv.CAP_PROP_FRAME_WIDTH))
 height = int(video.get(cv.CAP_PROP_FRAME_HEIGHT))
-video_dim = (width, height)
+video_dim = (width // resize_factor, height // resize_factor)
 cv.namedWindow('Video', cv.WINDOW_NORMAL)
-cv.resizeWindow('Video', width // 4, height // 4)
+cv.resizeWindow('Video', video_dim[0], video_dim[1])
 
 slam = Slam(width, height)
 renderer = Renderer3D(pov_=90, cam_distance=2000)

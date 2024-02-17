@@ -1,5 +1,5 @@
 """
-Rendu 3D
+3D render
 """
 
 import cv2 as cv
@@ -15,7 +15,7 @@ class Camera:
         self.position = position_ 
         self._projection_matrix = None
         self._modelview_matrix = None
-        self.orbital_radius = cam_distance_ # orbital_radius from the camera to the origin
+        self.orbital_radius = cam_distance_ # orbital radius from the camera to the origin
         self.polar = np.deg2rad(np.deg2rad(0))
         self.azimuth = np.deg2rad(np.deg2rad(0))
         self.setup(fov_y=fov, aspect_ratio=1.0, near=10, far=50000.0)
@@ -76,9 +76,9 @@ class Camera:
         x = self.orbital_radius * np.cos(self.polar) * np.cos(self.azimuth)
         y = self.orbital_radius * np.sin(self.polar)
         z = self.orbital_radius * np.cos(self.polar) * np.sin(self.azimuth)
-        self.position = (x,
-                         y,
-                         z)
+        self.position = (x + rotation_center[0],
+                         y + rotation_center[1],
+                         z + rotation_center[2])
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
         gluLookAt(*self.position, # from
@@ -156,41 +156,38 @@ class Renderer3D:
             z = 0
         return np.array([x, y, z])
 
-    def draw_points(self, points, position, rotation, color=(0.0, 1.0, 0.0)):
+    def draw_points(self, points, centroid, color=(0.0, 1.0, 0.0)):
         assert points is not None, "No points to draw"
         assert len(points) > 0, "No points to draw"
         """
+        # no need ? cv.triangulatePoints already give us world coordinates ?
         glPushMatrix()
         glTranslatef(position[0], position[1], position[2])
-        # Extract rotation angles from R_total
         angles = self.rotationMatrixToEulerAngles(rotation)
-        # Apply rotation
-        glRotatef(np.rad2deg(angles[0]), 1, 0, 0)  # Rotate around x-axis
-        glRotatef(np.rad2deg(angles[1]), 0, 1, 0)  # Rotate around y-axis
+        glRotatef(np.rad2deg(angles[0]), 1, 0, 0)
+        glRotatef(np.rad2deg(angles[1]), 0, 1, 0)
         glRotatef(np.rad2deg(angles[2]), 0, 0, 1) 
         glPopMatrix()
         """
         glBegin(GL_POINTS)
         for i, point in enumerate(points):
             color = (0.4, 0.8, 0)
-            point_wrld = (point[0] + position[0],
-                          point[1] + position[1],
-                          point[2] + position[2])
+            point_wrld = (point[0] + centroid[0],
+                          point[1] + centroid[1],
+                          point[2] + centroid[2])
             glColor3f(*color)
             glVertex3f(*point_wrld)
         glEnd()
 
     def draw_trajectory(self, camera_poses, color=(1.0, 0.0, 0.7)):
-        T_total = np.zeros((3, 1))
-        R_total = np.eye(3)
         glColor3f(*color)
         glBegin(GL_LINE_STRIP)
         for pose in camera_poses:
-            T_total += R_total @ pose['t']
-            R_total = R_total @ pose['R']
-            glVertex3f(*T_total)
+            pose_wrld = (pose['t'][0],
+                         pose['t'][1],
+                         pose['t'][2])
+            glVertex3f(*pose_wrld)
         glEnd()
-        return T_total
 
     @property
     def is_paused(self):
@@ -205,13 +202,8 @@ class Renderer3D:
         self.render_axis()
         print(f"RENDER: {len(camera_poses)} camera poses")
         print(f"RENDER: Rendering {len(points3Dcum)} points groups")
-        T_total = np.zeros((3, 1))
-        R_total = np.eye(3)
-        for i, points3D in enumerate(points3Dcum):
-            T_total += R_total @ camera_poses[i]['t']
-            R_total = R_total @ camera_poses[i]['R']
-            self.draw_points(points3D, T_total, R_total)
+        for i, points3D_info in enumerate(points3Dcum):
+            self.draw_points(points3D_info[0], points3D_info[1])
         self.draw_trajectory(camera_poses)
-        self.draw_cube()
         self.handle_inputs()
-        self.camera.update()
+        self.camera.update(rotation_center=camera_poses[-1]['t'])

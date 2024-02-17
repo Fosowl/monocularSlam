@@ -1,5 +1,5 @@
 """
-Implementation SLAM
+SLAM
 """
 
 import numpy as np
@@ -54,10 +54,13 @@ class Vision():
     def get_camera_poses(self):
         return self.camera_poses
     
-    def camera_pose_to_opengl(self, pose):
+    def camera_pose_to_opengl(self, T_total, R_total):
+        pose = dict()
+        pose['R'] = R_total
+        pose['t'] = T_total
         corrected_pose = copy.deepcopy(pose)
-        #corrected_pose['t'][1] *= -1
-        corrected_pose['t'][0] *= -1
+        corrected_pose['t'][2] *= -1
+        corrected_pose['t'][1] *= -1
         return corrected_pose
 
     def get_camera_pose(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
@@ -77,7 +80,7 @@ class Vision():
         pose['t'] = t
         self.current_frame.E = E
         self.current_frame.pose = pose
-        self.camera_poses.append(self.camera_pose_to_opengl(self.current_frame.pose))
+        self.camera_poses.append(self.camera_pose_to_opengl(self.T_total, self.R_total))
         self.T_total += self.R_total @ pose['t']
         self.R_total = self.R_total @ pose['R']
     
@@ -90,7 +93,7 @@ class Vision():
     def find_matching_points(self, current_frame: Frame):
         assert current_frame.pixels is not None, "No frame passed"
         match = np.mean(current_frame.pixels, axis=2).astype(np.uint8)
-        feats = cv.goodFeaturesToTrack(match, maxCorners=1000, qualityLevel=0.01, minDistance=7)
+        feats = cv.goodFeaturesToTrack(match, maxCorners=3000, qualityLevel=0.01, minDistance=7)
         kps = [cv.KeyPoint(x=f[0][0], y=f[0][1], size=20) for f in feats]
         kps, des = self.orb.compute(current_frame.pixels, kps)
         self.feats = feats
@@ -115,13 +118,10 @@ class Vision():
 
         for i, (pt1, pt2) in enumerate(matches):
             assert pt1 != pt2, "Points are the same"
-            r = ((i + 1) / len(matches)) * 255
-            g = 255
-            b = 0
             # current frame
-            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(b, g, r), radius=4)
+            cv.circle(frame.pixels, (int(pt1[0]), int(pt1[1])), color=(0, 255, 255), radius=4)
             # previous frame
-            cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(g, 0, 255), radius=3)
+            cv.circle(frame.pixels, (int(pt2[0]), int(pt2[1])), color=(255, 0, 255), radius=3)
             # line
             cv.line(frame.pixels, (int(pt1[0]), int(pt1[1])), (int(pt2[0]), int(pt2[1])), color=(38, 207, 63), thickness=1)
         return frame.pixels
@@ -209,29 +209,31 @@ class Slam():
             projPoints2.append([kp2[0], kp2[1]])
         projPoints1 = np.array(projPoints1).T  # (2, N)
         projPoints2 = np.array(projPoints2).T
-        mtx1 = self.vision.K
-        mtx2 = self.vision.K
-        projMat1 = mtx1 @ cv.hconcat([self.vision.current_frame.pose['R'], self.vision.current_frame.pose['t']]) # Cam1 is the origin
-        projMat2 = mtx2 @ cv.hconcat([self.vision.last_frame.pose['R'], self.vision.last_frame.pose['t']]) # R, T from stereoCalibrate
-        points1u = cv.undistortPoints(projPoints1, mtx1, 1, None, mtx1)
-        points2u = cv.undistortPoints(projPoints2, mtx2, 1, None, mtx2)
-        #points4D = cv.triangulatePoints(self._past_projection_matrix, self._projection_matrix, projPoints1, projPoints2)
+        K = self.vision.K
+        projMat1 = K @ cv.hconcat([self.vision.current_frame.pose['R'], self.vision.current_frame.pose['t']]) # Cam1 is the origin
+        projMat2 = K @ cv.hconcat([self.vision.last_frame.pose['R'], self.vision.last_frame.pose['t']]) # R, T from stereoCalibrate
+        points1u = cv.undistortPoints(projPoints1, K, 1, None, K)
+        points2u = cv.undistortPoints(projPoints2, K, 1, None, K)
         points4D = cv.triangulatePoints(projMat1, projMat2, points1u, points2u)
         # 3d
         points3D = (points4D[:3] / points4D[3]) # normalize and go 3d
         goods = np.abs(points4D[3, :]) > 0.005 # check w good
+        goods &= points3D[1, :] > 0 # check point are not underground
         goods &= points3D[2, :] > 0 # check points are in front of camera
+        goods &= points3D[2, :] < 500 # check points are not too far
+        goods &= np.abs(points3D[0, :]) < 500 # check points are not too far
         if len(goods[goods == True]) < 25:
             print("error: not enough points")
             return None
         points3D = points3D[:, goods]
         points3D = self.transform_points_3D_openGL(points3D)
-        points3D = self.hand_rule_change(points3D)
         self.points_centroid = sum([v for v in points3D]) / len(points3D)
         print("SLAM: points centroid: ", self.points_centroid)
         print(f"SLAM: estimate position: {self.vision.T_total[0]}, {self.vision.T_total[1]}, {self.vision.T_total[2]}")
         self.vision.last_frame.E = self.vision.current_frame.E
         self.vision.last_frame.pose = self.vision.current_frame.pose
-        self.points3Dcumulative.append(points3D)
+        point_info = (points3D, self.points_centroid)
+        print(f"info: {point_info}")
+        self.points3Dcumulative.append(point_info)
         return self.points3Dcumulative
     

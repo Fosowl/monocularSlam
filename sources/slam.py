@@ -59,8 +59,8 @@ class Vision():
         pose['R'] = R_total
         pose['t'] = T_total
         corrected_pose = copy.deepcopy(pose)
+        corrected_pose['t'][1] = 0
         corrected_pose['t'][2] *= -1
-        corrected_pose['t'][1] *= -1
         return corrected_pose
 
     def get_camera_pose(self, matches: List[Tuple[Tuple[float, float], Tuple[float, float]]]):
@@ -179,10 +179,9 @@ class Slam():
     def transform_points_3D_openGL(self, points3D):
         assert points3D is not None, "points3D None"
         assert points3D.shape[0] == 3, "Points3D not 3D"
-        R, t = self.vision.get_pose_cumulation()
-        R_inv = R.T
-        t_inv = -R.T @ t
-        return np.dot(points3D.T, R_inv) + t_inv.T
+        R_total, t_total = self.vision.get_pose_cumulation()
+        pose_corrected = self.vision.camera_pose_to_opengl(t_total, R_total)
+        return np.dot(points3D.T, pose_corrected['R']) + pose_corrected['t'].T
     
     # useless
     def project_points(self, points3D):
@@ -220,20 +219,20 @@ class Slam():
         goods = np.abs(points4D[3, :]) > 0.005 # check w good
         goods &= points3D[1, :] > 0 # check point are not underground
         goods &= points3D[2, :] > 0 # check points are in front of camera
-        goods &= points3D[2, :] < 500 # check points are not too far
-        goods &= np.abs(points3D[0, :]) < 500 # check points are not too far
+        goods &= points3D[2, :] < 500 # check points z are not too far
+        goods &= np.abs(points3D[0, :]) < 500 # check points x are not too far
         if len(goods[goods == True]) < 25:
             print("error: not enough points")
             return None
         points3D = points3D[:, goods]
         points3D = self.transform_points_3D_openGL(points3D)
+        #points3D = self.hand_rule_change(points3D)
         self.points_centroid = sum([v for v in points3D]) / len(points3D)
         print("SLAM: points centroid: ", self.points_centroid)
         print(f"SLAM: estimate position: {self.vision.T_total[0]}, {self.vision.T_total[1]}, {self.vision.T_total[2]}")
         self.vision.last_frame.E = self.vision.current_frame.E
         self.vision.last_frame.pose = self.vision.current_frame.pose
         point_info = (points3D, self.points_centroid)
-        print(f"info: {point_info}")
         self.points3Dcumulative.append(point_info)
         return self.points3Dcumulative
     

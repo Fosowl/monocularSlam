@@ -108,17 +108,21 @@ class Renderer3D:
                 self.pause = not self.pause
                 print("Paused" if self.pause else "Unpaused")
 
-    def draw_cube(self):
+    def draw_cube(self, position=(0.0, 0.0, 0.0)):
         vertices = [(-0.5, -0.5, -0.5), (0.5, -0.5, -0.5), (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),
                     (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5), (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5)]
         edges = [(0, 1), (1, 2), (2, 3), (3, 0), (4, 5), (5, 6), (6, 7), (7, 4), (0, 4), (1, 5), (2, 6), (3, 7)]
 
+        color = (1.0, 0.0, 0.0)
         glBegin(GL_LINES)
+        glColor3f(*color)
         for edge in edges:
             for vertex in edge:
-                glVertex3fv(vertices[vertex])
+                glVertex3f(vertices[vertex][0] + position[0],
+                           vertices[vertex][1] + position[1],
+                           vertices[vertex][2] + position[2])
         glEnd()
-    
+
     def draw_lines(self, start, end, color=(0.0, 1.0, 0.0)):
         glColor3f(*color)
         glBegin(GL_LINES)
@@ -156,38 +160,23 @@ class Renderer3D:
             z = 0
         return np.array([x, y, z])
 
-    def draw_points(self, points, centroid, color=(0.0, 1.0, 0.0)):
+    def draw_points(self, points, rotation, position, color=(0.0, 1.0, 0.0)):
         assert points is not None, "No points to draw"
         assert len(points) > 0, "No points to draw"
-        """
-        # no need ? cv.triangulatePoints already give us world coordinates ?
-        glPushMatrix()
-        glTranslatef(position[0], position[1], position[2])
-        angles = self.rotationMatrixToEulerAngles(rotation)
-        glRotatef(np.rad2deg(angles[0]), 1, 0, 0)
-        glRotatef(np.rad2deg(angles[1]), 0, 1, 0)
-        glRotatef(np.rad2deg(angles[2]), 0, 0, 1) 
-        glPopMatrix()
-        """
         glBegin(GL_POINTS)
         for i, point in enumerate(points):
             color = (0.4, 0.8, 0)
-            point_wrld = (point[0] + centroid[0],
-                          point[1] + centroid[1],
-                          point[2] + centroid[2])
+            #point_wrld = np.dot(rotation, point)
             glColor3f(*color)
-            glVertex3f(*point_wrld)
+            glVertex3f(*point)
         glEnd()
 
     def draw_trajectory(self, camera_poses, color=(1.0, 0.0, 0.7)):
-        glColor3f(*color)
-        glBegin(GL_LINE_STRIP)
         for pose in camera_poses:
             pose_wrld = (pose['t'][0],
                          pose['t'][1],
                          pose['t'][2])
-            glVertex3f(*pose_wrld)
-        glEnd()
+            self.draw_cube(pose_wrld)
 
     @property
     def is_paused(self):
@@ -203,7 +192,7 @@ class Renderer3D:
         print(f"RENDER: {len(camera_poses)} camera poses")
         print(f"RENDER: Rendering {len(points3Dcum)} points groups")
         for i, points3D_info in enumerate(points3Dcum):
-            self.draw_points(points3D_info[0], points3D_info[1])
+            self.draw_points(points3D_info[0], rotation=camera_poses[i]['R'], position=camera_poses[i]['t'])
         self.draw_trajectory(camera_poses)
         self.handle_inputs()
         self.camera.update(rotation_center=camera_poses[-1]['t'])

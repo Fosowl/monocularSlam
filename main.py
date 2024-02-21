@@ -17,9 +17,8 @@ cv.namedWindow('Video', cv.WINDOW_NORMAL)
 cv.resizeWindow('Video', video_dim[0], video_dim[1])
 
 slam = Slam(width, height)
-renderer = Renderer3D(pov_=90, cam_distance=1500)
+renderer = Renderer3D(pov_=90, cam_distance=600)
 
-skip_frame = 2
 matches = None
 
 frame_pixels = None

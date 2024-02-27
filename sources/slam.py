@@ -181,7 +181,7 @@ class Slam():
         assert points3D.shape[0] == 3, "Points3D not 3D"
         R_total, t_total = self.vision.get_pose_cumulation()
         pose_corrected = self.vision.camera_pose_to_opengl(t_total, R_total)
-        return np.dot(points3D.T, pose_corrected['R']) + pose_corrected['t'].T
+        return np.dot(points3D.T, -pose_corrected['R']) + pose_corrected['t'].T
     
     # useless
     def project_points(self, points3D):
@@ -209,8 +209,8 @@ class Slam():
         projPoints1 = np.array(projPoints1).T  # (2, N)
         projPoints2 = np.array(projPoints2).T
         K = self.vision.K
-        projMat1 = K @ cv.hconcat([self.vision.current_frame.pose['R'], self.vision.current_frame.pose['t']]) # Cam1 is the origin
-        projMat2 = K @ cv.hconcat([self.vision.last_frame.pose['R'], self.vision.last_frame.pose['t']]) # R, T from stereoCalibrate
+        projMat1 = K @ cv.hconcat([self.vision.current_frame.pose['R'], self.vision.current_frame.pose['t']])
+        projMat2 = K @ cv.hconcat([self.vision.last_frame.pose['R'], self.vision.last_frame.pose['t']])
         points1u = cv.undistortPoints(projPoints1, K, 1, None, K)
         points2u = cv.undistortPoints(projPoints2, K, 1, None, K)
         points4D = cv.triangulatePoints(projMat1, projMat2, points1u, points2u)

@@ -150,7 +150,7 @@ class Renderer3D:
         assert(self.isRotationMatrix(R))
         sy = math.sqrt(R[0,0] * R[0,0] +  R[1,0] * R[1,0])
         singular = sy < 1e-6
-        if  not singular :
+        if not singular :
             x = math.atan2(R[2,1] , R[2,2])
             y = math.atan2(-R[2,0], sy)
             z = math.atan2(R[1,0], R[0,0])
@@ -166,7 +166,6 @@ class Renderer3D:
         glBegin(GL_POINTS)
         for i, point in enumerate(points):
             color = (0.4, 0.8, 0)
-            #point_wrld = np.dot(rotation, point)
             glColor3f(*color)
             glVertex3f(*point)
         glEnd()

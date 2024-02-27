@@ -4,7 +4,7 @@ import cv2 as cv
 from sources.slam import Slam
 from sources.render import Renderer3D
 
-video = cv.VideoCapture('./videos/mountain.mp4')
+video = cv.VideoCapture('./videos/cactus.mp4')
 if not video.isOpened():
     print("Failed to read video")
     exit()
@@ -17,7 +17,7 @@ cv.namedWindow('Video', cv.WINDOW_NORMAL)
 cv.resizeWindow('Video', video_dim[0], video_dim[1])
 
 slam = Slam(width, height)
-renderer = Renderer3D(pov_=90, cam_distance=600)
+renderer = Renderer3D(pov_=90, cam_distance=1200)
 
 matches = None
 

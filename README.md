@@ -1,3 +1,3 @@
 # SLAM!
 
-![alt text](assets/slam.png)
+![alt text](assets/slam2.png)

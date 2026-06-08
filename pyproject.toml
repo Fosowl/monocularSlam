@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "monocular-slam"
+version = "0.1.0"
+description = "Monocular SLAM implementation from a single lens video"
+readme = "README.md"
+license = { text = "GPL-3.0" }
+requires-python = ">=3.8"
+authors = [
+    { name = "monocularSlam contributors" },
+]
+keywords = ["slam", "computer-vision", "opencv", "monocular", "3d-reconstruction"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "pygame",
+    "PyOpenGL",
+    "yt-dlp",
+]
+
+[project.urls]
+Homepage = "https://github.com/monocularSlam/monocularSlam"
+Repository = "https://github.com/monocularSlam/monocularSlam"
+Issues = "https://github.com/monocularSlam/monocularSlam/issues"

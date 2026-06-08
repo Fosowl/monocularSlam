@@ -7,7 +7,7 @@ name = "monocular-slam"
 version = "0.1.0"
 description = "Monocular SLAM implementation from a single lens video"
 readme = "README.md"
-license = { text = "GPL-3.0" }
+license = "GPL-3.0"
 requires-python = ">=3.8"
 authors = [
     { name = "monocularSlam contributors" },
@@ -17,7 +17,6 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
@@ -34,6 +33,9 @@ dependencies = [
     "PyOpenGL",
     "yt-dlp",
 ]
+
+[tool.setuptools]
+packages = ["sources"]
 
 [project.urls]
 Homepage = "https://github.com/monocularSlam/monocularSlam"
